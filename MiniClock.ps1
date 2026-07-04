@@ -60,7 +60,7 @@ public static class MiniClockSounds {
 '@
 
 $script:AppName = 'MiniClock'
-$script:AppVersion = [Version]'1.5.1'
+$script:AppVersion = [Version]'1.6.0'
 $script:LatestReleaseApi = 'https://api.github.com/repos/Abohola/MiniClock/releases/latest'
 $script:SettingsDir = Join-Path $env:APPDATA $script:AppName
 $script:SettingsFile = Join-Path $script:SettingsDir 'settings.json'
@@ -76,6 +76,11 @@ $script:TimerPausedSeconds = 0.0
 $script:TimerEnd = $null
 $script:Stopwatch = [System.Diagnostics.Stopwatch]::new()
 $script:AlarmNames = @('Crystal', 'Digital', 'Gentle', 'Sunrise', 'Chime', 'Pulse', 'Retro', 'Urgent')
+$script:ThemeNames = @(
+    'Glass', 'Midnight Neon', 'Warm Ember', 'Minimal', 'Matrix',
+    'Cyberpunk', 'Hologram', 'Obsidian', 'Crimson Edge',
+    'Ultraviolet', 'Arctic Circuit', 'Acid Lime', 'Copper Core'
+)
 
 $script:ColorChoices = @(
     @('White', '#FFFFFFFF'), @('Warm', '#FFFFD38A'),
@@ -231,6 +236,8 @@ function Apply-Appearance {
     $font = 'Segoe UI Semibold'
     $corner = 9
     $borderWidth = 0
+    $glowColor = '#FF000000'
+    $glowBlur = 9
     switch ($theme) {
         'Glass' {
             $background = '#B8233550'; $border = '#90BFEAFF'; $textColor = '#FFF4FBFF'
@@ -238,11 +245,11 @@ function Apply-Appearance {
         }
         'Midnight Neon' {
             $background = '#DC070B1C'; $border = '#B12EDCFF'; $textColor = '#FF79E8FF'
-            $corner = 10; $borderWidth = 1
+            $corner = 10; $borderWidth = 1; $glowColor = '#FF2EDCFF'; $glowBlur = 14
         }
         'Warm Ember' {
             $background = '#D82B1114'; $border = '#AFFF9A62'; $textColor = '#FFFFD2A1'
-            $corner = 12; $borderWidth = 1
+            $corner = 12; $borderWidth = 1; $glowColor = '#FFFF6B35'; $glowBlur = 12
         }
         'Matrix' {
             $background = '#E208120C'; $border = '#9B38FF7A'; $textColor = '#FF55FF88'
@@ -250,6 +257,40 @@ function Apply-Appearance {
         }
         'Minimal' {
             $background = '#01000000'; $border = '#00FFFFFF'; $textColor = '#FFFFFFFF'
+        }
+        'Cyberpunk' {
+            $background = '#EB10051D'; $border = '#E6FF2FB3'; $textColor = '#FF5EFAFF'
+            $font = 'Cascadia Mono'; $corner = 3; $borderWidth = 2
+            $glowColor = '#FFFF2FB3'; $glowBlur = 17
+        }
+        'Hologram' {
+            $background = '#A8174960'; $border = '#C07CFFF0'; $textColor = '#FFE4FFFF'
+            $corner = 18; $borderWidth = 1; $glowColor = '#FF48F3E2'; $glowBlur = 19
+        }
+        'Obsidian' {
+            $background = '#F1080A0F'; $border = '#9FA9B5C2'; $textColor = '#FFF2F5F8'
+            $corner = 6; $borderWidth = 1; $glowColor = '#FF64748B'; $glowBlur = 10
+        }
+        'Crimson Edge' {
+            $background = '#E91A050B'; $border = '#DFFF3158'; $textColor = '#FFFFD7DF'
+            $corner = 5; $borderWidth = 2; $glowColor = '#FFFF174D'; $glowBlur = 15
+        }
+        'Ultraviolet' {
+            $background = '#DC160A32'; $border = '#D0B76CFF'; $textColor = '#FFF1DCFF'
+            $corner = 15; $borderWidth = 1; $glowColor = '#FF9C4DFF'; $glowBlur = 18
+        }
+        'Arctic Circuit' {
+            $background = '#E8DCEFFF'; $border = '#EFFFFFFF'; $textColor = '#FF102A43'
+            $corner = 12; $borderWidth = 1; $glowColor = '#FF80D8FF'; $glowBlur = 14
+        }
+        'Acid Lime' {
+            $background = '#ED080D08'; $border = '#D5C6FF27'; $textColor = '#FFD7FF52'
+            $font = 'Cascadia Mono'; $corner = 2; $borderWidth = 2
+            $glowColor = '#FFA8FF00'; $glowBlur = 14
+        }
+        'Copper Core' {
+            $background = '#E626120A'; $border = '#D8E78A45'; $textColor = '#FFFFD0A6'
+            $corner = 9; $borderWidth = 1; $glowColor = '#FFFF7A2D'; $glowBlur = 13
         }
     }
     $brush = $converter.ConvertFromString($textColor)
@@ -262,16 +303,8 @@ function Apply-Appearance {
     $script:HitArea.BorderThickness = [System.Windows.Thickness]::new($borderWidth)
     $script:HitArea.CornerRadius = [System.Windows.CornerRadius]::new($corner)
     $script:Glow.Opacity = if ($script:Settings.Shadow) { 0.72 } else { 0 }
-    if ($theme -eq 'Midnight Neon') {
-        $script:Glow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#402EDCFF')
-        $script:Glow.BlurRadius = 14
-    } elseif ($theme -eq 'Warm Ember') {
-        $script:Glow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#55FF6B35')
-        $script:Glow.BlurRadius = 12
-    } else {
-        $script:Glow.Color = [System.Windows.Media.Colors]::Black
-        $script:Glow.BlurRadius = 9
-    }
+    $script:Glow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString($glowColor)
+    $script:Glow.BlurRadius = $glowBlur
     if ($script:ThemeItems) {
         foreach ($key in @($script:ThemeItems.Keys)) {
             $script:ThemeItems[$key].Checked = ($key -eq $theme)
@@ -416,7 +449,7 @@ function Show-SettingsWindow {
     $script:SettingsWindow = $window
     $themeBox = $window.FindName('ThemeBox')
     $colorBox = $window.FindName('ColorBox')
-    foreach ($name in @('Glass', 'Midnight Neon', 'Warm Ember', 'Minimal', 'Matrix')) {
+    foreach ($name in $script:ThemeNames) {
         $item = [System.Windows.Controls.ComboBoxItem]::new()
         $item.Content = $name; $item.Tag = $name
         [void]$themeBox.Items.Add($item)
@@ -804,7 +837,7 @@ foreach ($entry in @(@('50%',0.5), @('70%',0.7), @('85%',0.85), @('100%',1.0))) 
 
 $themeMenu = [System.Windows.Forms.ToolStripMenuItem]::new('Theme')
 $script:ThemeItems = @{}
-foreach ($themeName in @('Glass', 'Midnight Neon', 'Warm Ember', 'Minimal', 'Matrix')) {
+foreach ($themeName in $script:ThemeNames) {
     $value = $themeName
     $item = New-MenuItem $themeName ({
         $script:Settings.Theme = $value
@@ -920,6 +953,9 @@ $app.Add_DispatcherUnhandledException({
 if ($SmokeTestSettings) {
     $script:Window.Add_ContentRendered({
         Show-SettingsWindow
+        foreach ($item in $script:SettingsControls.ThemeBox.Items) {
+            $script:SettingsControls.ThemeBox.SelectedItem = $item
+        }
         $script:SettingsControls.OpacitySlider.Value = [Math]::Max(0.25, [double]$script:Settings.Opacity - 0.05)
         $script:SettingsWindow.Close()
     })

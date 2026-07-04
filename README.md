@@ -30,7 +30,8 @@ icon to open the menu.
 - Show or hide seconds and the date
 - Choose size, opacity, color, and text shadow
 - Choose from 17 clock colors, including black
-- Switch between Glass, Midnight Neon, Warm Ember, Minimal, and Matrix themes
+- Switch between 13 themes, including Cyberpunk, Hologram, Obsidian,
+  Crimson Edge, Ultraviolet, Arctic Circuit, Acid Lime, and Copper Core
 - Open a separate live Settings window without stopping the background clock
 - Use a high-contrast glassmorphism Settings panel with readable controls
 - Run a background countdown timer with eight selectable alarm sounds

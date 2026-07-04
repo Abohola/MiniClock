@@ -1,5 +1,5 @@
 #define MyAppName "MiniClock"
-#define MyAppVersion "1.5.1"
+#define MyAppVersion "1.6.0"
 #define MyAppPublisher "Abohola"
 #define MyAppURL "https://github.com/Abohola/MiniClock"
 
