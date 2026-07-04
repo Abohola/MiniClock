@@ -1,19 +1,66 @@
-param([switch]$StartHidden, [switch]$OpenSettings)
+param([switch]$StartHidden, [switch]$OpenSettings, [switch]$OpenTools)
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms, System.Drawing
 
 Add-Type @'
 using System;
+using System.IO;
+using System.Media;
 using System.Runtime.InteropServices;
+using System.Threading;
 public static class MiniClockNative {
     [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll")] public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 }
+public static class MiniClockSounds {
+    private static readonly int[][] Melodies = new int[][] {
+        new int[] { 880, 1175, 1568 },
+        new int[] { 784, 784, 1047, 1047 },
+        new int[] { 523, 659, 784, 1047 },
+        new int[] { 392, 523, 659, 784, 1047 },
+        new int[] { 1047, 1319, 1568, 2093 },
+        new int[] { 660, 880, 660, 880, 1100 },
+        new int[] { 330, 440, 554, 659, 880 },
+        new int[] { 988, 740, 988, 740, 1175, 988 }
+    };
+    public static void Play(int index) {
+        ThreadPool.QueueUserWorkItem(_ => {
+            int[] notes = Melodies[Math.Max(0, Math.Min(index, Melodies.Length - 1))];
+            foreach (int note in notes) {
+                using (MemoryStream wave = CreateTone(note, index == 7 ? 180 : 260)) {
+                    using (SoundPlayer player = new SoundPlayer(wave)) { player.PlaySync(); }
+                }
+                Thread.Sleep(index == 5 || index == 7 ? 70 : 110);
+            }
+        });
+    }
+    private static MemoryStream CreateTone(int frequency, int milliseconds) {
+        const int sampleRate = 22050;
+        int samples = sampleRate * milliseconds / 1000;
+        MemoryStream stream = new MemoryStream();
+        BinaryWriter writer = new BinaryWriter(stream);
+        int dataLength = samples * 2;
+        writer.Write(new char[] {'R','I','F','F'});
+        writer.Write(36 + dataLength);
+        writer.Write(new char[] {'W','A','V','E','f','m','t',' '});
+        writer.Write(16); writer.Write((short)1); writer.Write((short)1);
+        writer.Write(sampleRate); writer.Write(sampleRate * 2);
+        writer.Write((short)2); writer.Write((short)16);
+        writer.Write(new char[] {'d','a','t','a'}); writer.Write(dataLength);
+        for (int i = 0; i < samples; i++) {
+            double envelope = Math.Min(1.0, i / (sampleRate * .025)) *
+                              Math.Min(1.0, (samples - i) / (sampleRate * .06));
+            short value = (short)(Math.Sin(2 * Math.PI * frequency * i / sampleRate) * 9000 * envelope);
+            writer.Write(value);
+        }
+        writer.Flush(); stream.Position = 0; return stream;
+    }
+}
 '@
 
 $script:AppName = 'MiniClock'
-$script:AppVersion = [Version]'1.3.0'
+$script:AppVersion = [Version]'1.4.0'
 $script:LatestReleaseApi = 'https://api.github.com/repos/Abohola/MiniClock/releases/latest'
 $script:SettingsDir = Join-Path $env:APPDATA $script:AppName
 $script:SettingsFile = Join-Path $script:SettingsDir 'settings.json'
@@ -21,6 +68,13 @@ $script:StartupLink = Join-Path ([Environment]::GetFolderPath('Startup')) 'MiniC
 $script:Launcher = Join-Path $PSScriptRoot 'Launch MiniClock.vbs'
 $script:Exiting = $false
 $script:SettingsWindow = $null
+$script:ToolsWindow = $null
+$script:AlarmPopup = $null
+$script:TimerRunning = $false
+$script:TimerPausedSeconds = 0.0
+$script:TimerEnd = $null
+$script:Stopwatch = [System.Diagnostics.Stopwatch]::new()
+$script:AlarmNames = @('Crystal', 'Digital', 'Gentle', 'Sunrise', 'Chime', 'Pulse', 'Retro', 'Urgent')
 
 $script:ColorChoices = @(
     @('White', '#FFFFFFFF'), @('Warm', '#FFFFD38A'),
@@ -38,7 +92,7 @@ $script:Defaults = @{
     Left = 80.0; Top = 80.0; Scale = 1.0; Opacity = 0.88
     Use24Hour = $false; ShowSeconds = $true; ShowDate = $false
     Locked = $false; ClickThrough = $false; TextColor = '#FFFFFFFF'
-    Shadow = $true; Theme = 'Glass'
+    Shadow = $true; Theme = 'Glass'; AlarmSound = 'Crystal'
 }
 
 function Load-Settings {
@@ -355,6 +409,252 @@ function Show-SettingsWindow {
     $window.Activate()
 }
 
+function Show-AlarmPopup([string]$Title, [string]$Message) {
+    if ($script:AlarmPopup) { $script:AlarmPopup.Close() }
+    [xml]$popupXaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="370" Height="145" WindowStyle="None" AllowsTransparency="True"
+        Background="Transparent" ShowInTaskbar="False" Topmost="True" ResizeMode="NoResize">
+  <Border CornerRadius="22" BorderThickness="1" BorderBrush="#AA9BE7FF" Padding="18"
+          Background="#F0182944">
+    <Border.Effect><DropShadowEffect Color="#FF38C9FF" BlurRadius="24" ShadowDepth="2" Opacity=".48"/></Border.Effect>
+    <Grid>
+      <Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <Border Width="44" Height="44" CornerRadius="15" Background="#FF244D70" VerticalAlignment="Top">
+        <TextBlock Text="⏱" FontSize="25" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+      </Border>
+      <StackPanel Grid.Column="1" Margin="12,0,8,0">
+        <TextBlock x:Name="PopupTitle" Foreground="White" FontSize="17" FontWeight="SemiBold"/>
+        <TextBlock x:Name="PopupMessage" Foreground="#FFBFD8EC" FontSize="13" Margin="0,5,0,0" TextWrapping="Wrap"/>
+      </StackPanel>
+      <Button x:Name="DismissButton" Grid.Column="2" Content="×" Width="30" Height="30"
+              FontSize="18" Foreground="White" Background="#334A6D8D" BorderThickness="0"/>
+    </Grid>
+  </Border>
+</Window>
+'@
+    $reader = New-Object System.Xml.XmlNodeReader $popupXaml
+    $popup = [Windows.Markup.XamlReader]::Load($reader)
+    $script:AlarmPopup = $popup
+    $popup.FindName('PopupTitle').Text = $Title
+    $popup.FindName('PopupMessage').Text = $Message
+    $popup.FindName('DismissButton').Add_Click({ $popup.Close() }.GetNewClosure())
+    $popup.Add_Closed({ $script:AlarmPopup = $null })
+    $area = [System.Windows.SystemParameters]::WorkArea
+    $popup.Left = $area.Right - 390
+    $popup.Top = $area.Bottom - 165
+    $popup.Show()
+    $popup.Activate()
+    $dismissTimer = [System.Windows.Threading.DispatcherTimer]::new()
+    $dismissTimer.Interval = [TimeSpan]::FromSeconds(10)
+    $dismissTimer.Add_Tick({
+        $dismissTimer.Stop()
+        if ($popup.IsVisible) { $popup.Close() }
+    }.GetNewClosure())
+    $dismissTimer.Start()
+}
+
+function Play-SelectedAlarm {
+    $index = [Array]::IndexOf($script:AlarmNames, [string]$script:Settings.AlarmSound)
+    if ($index -lt 0) { $index = 0 }
+    [MiniClockSounds]::Play($index)
+}
+
+function Update-TimeTools {
+    $remaining = $script:TimerPausedSeconds
+    if ($script:TimerRunning -and $script:TimerEnd) {
+        $remaining = ($script:TimerEnd - [DateTime]::Now).TotalSeconds
+        if ($remaining -le 0) {
+            $remaining = 0
+            $script:TimerRunning = $false
+            $script:TimerEnd = $null
+            $script:TimerPausedSeconds = 0
+            Play-SelectedAlarm
+            Show-AlarmPopup 'Timer complete' 'Your MiniClock countdown has finished.'
+        }
+    }
+    if ($script:ToolsControls) {
+        $safe = [Math]::Max(0, $remaining)
+        $span = [TimeSpan]::FromSeconds($safe)
+        $script:ToolsControls.TimerDisplay.Text = '{0:00}:{1:00}:{2:00}' -f [Math]::Floor($span.TotalHours), $span.Minutes, $span.Seconds
+        $script:ToolsControls.TimerStart.Content = if ($script:TimerRunning) { 'Pause' } elseif ($safe -gt 0) { 'Resume' } else { 'Start timer' }
+        $elapsed = $script:Stopwatch.Elapsed
+        $script:ToolsControls.StopwatchDisplay.Text = '{0:00}:{1:00}:{2:00}.{3:0}' -f [Math]::Floor($elapsed.TotalHours), $elapsed.Minutes, $elapsed.Seconds, [Math]::Floor($elapsed.Milliseconds / 100)
+        $script:ToolsControls.StopwatchStart.Content = if ($script:Stopwatch.IsRunning) { 'Pause' } else { 'Start' }
+    }
+}
+
+function Show-TimeTools {
+    if ($script:ToolsWindow) {
+        $script:ToolsWindow.Show()
+        $script:ToolsWindow.Activate()
+        return
+    }
+    [xml]$toolsXaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="500" Height="590" WindowStyle="None" AllowsTransparency="True"
+        Background="Transparent" ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
+        Topmost="True" ShowInTaskbar="True" FontFamily="Segoe UI">
+  <Window.Resources>
+    <Style x:Key="ClayButton" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/><Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Background" Value="#FF315475"/><Setter Property="BorderBrush" Value="#886FD8FF"/>
+      <Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="18,10"/>
+      <Setter Property="Margin" Value="5"/>
+      <Setter Property="Template">
+        <Setter.Value><ControlTemplate TargetType="Button">
+          <Border x:Name="B" CornerRadius="14" Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                  Padding="{TemplateBinding Padding}">
+            <Border.Effect><DropShadowEffect Color="#FF000000" BlurRadius="8" ShadowDepth="3" Opacity=".35"/></Border.Effect>
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="B" Property="Background" Value="#FF3D6B91"/></Trigger>
+            <Trigger Property="IsPressed" Value="True"><Setter TargetName="B" Property="RenderTransform"><Setter.Value><ScaleTransform ScaleX=".97" ScaleY=".97"/></Setter.Value></Setter></Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value>
+      </Setter>
+    </Style>
+    <Style TargetType="TextBox">
+      <Setter Property="Background" Value="#66101A29"/><Setter Property="Foreground" Value="White"/>
+      <Setter Property="BorderBrush" Value="#775ACBEE"/><Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontSize" Value="22"/><Setter Property="TextAlignment" Value="Center"/>
+      <Setter Property="Padding" Value="8"/><Setter Property="Margin" Value="5"/>
+    </Style>
+  </Window.Resources>
+  <Border CornerRadius="28" BorderThickness="1" BorderBrush="#AA95E9FF" Background="#F0162339" Padding="1">
+    <Border.Effect><DropShadowEffect Color="#FF000000" BlurRadius="35" ShadowDepth="8" Opacity=".65"/></Border.Effect>
+    <Grid ClipToBounds="True">
+      <Border Width="260" Height="90" Background="#2247DFFF" CornerRadius="40"
+              HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-18,-80,0">
+        <Border.RenderTransform><SkewTransform AngleX="-18"/></Border.RenderTransform>
+      </Border>
+      <Grid Margin="22,16">
+        <Grid.RowDefinitions><RowDefinition Height="54"/><RowDefinition Height="48"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <Grid x:Name="DragBar" Grid.Row="0">
+          <TextBlock Text="MiniClock Time Tools" Foreground="White" FontSize="21" FontWeight="SemiBold" VerticalAlignment="Center"/>
+          <Button x:Name="CloseTools" Content="×" Width="38" Height="34" HorizontalAlignment="Right"
+                  Foreground="White" Background="#443D5A76" BorderThickness="0" FontSize="20"/>
+        </Grid>
+        <Grid Grid.Row="1">
+          <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <Button x:Name="TimerTab" Grid.Column="0" Content="COUNTDOWN TIMER" Style="{StaticResource ClayButton}" Padding="8"/>
+          <Button x:Name="StopwatchTab" Grid.Column="1" Content="STOPWATCH" Style="{StaticResource ClayButton}" Padding="8"/>
+        </Grid>
+        <Grid Grid.Row="2">
+          <Grid x:Name="TimerPanel">
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock x:Name="TimerDisplay" Text="00:00:00" Foreground="#FFF5FBFF" FontFamily="Cascadia Mono"
+                         FontSize="56" FontWeight="Light" HorizontalAlignment="Center" Margin="0,10"/>
+              <TextBlock Text="SET HOURS · MINUTES · SECONDS" Foreground="#FF8FA9C2" FontSize="11" HorizontalAlignment="Center"/>
+              <Grid Margin="40,5">
+                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="24"/><ColumnDefinition/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                <TextBox x:Name="HoursBox" Grid.Column="0" Text="0"/>
+                <TextBlock Grid.Column="1" Text=":" Foreground="White" FontSize="25" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                <TextBox x:Name="MinutesBox" Grid.Column="2" Text="5"/>
+                <TextBlock Grid.Column="3" Text=":" Foreground="White" FontSize="25" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                <TextBox x:Name="SecondsBox" Grid.Column="4" Text="0"/>
+              </Grid>
+              <TextBlock Text="ALARM SOUND" Foreground="#FF8FA9C2" FontSize="11" Margin="45,10,45,2"/>
+              <Grid Margin="40,0">
+                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="105"/></Grid.ColumnDefinitions>
+                <ComboBox x:Name="SoundBox" Height="36" Margin="5" FontSize="14"/>
+                <Button x:Name="TestSound" Grid.Column="1" Content="Preview" Style="{StaticResource ClayButton}" Padding="8"/>
+              </Grid>
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8">
+                <Button x:Name="TimerStart" Content="Start timer" Style="{StaticResource ClayButton}" MinWidth="135"/>
+                <Button x:Name="TimerReset" Content="Reset" Style="{StaticResource ClayButton}" MinWidth="95"/>
+              </StackPanel>
+            </StackPanel>
+          </Grid>
+          <Grid x:Name="StopwatchPanel" Visibility="Collapsed">
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock x:Name="StopwatchDisplay" Text="00:00:00.0" Foreground="#FFF5FBFF" FontFamily="Cascadia Mono"
+                         FontSize="53" FontWeight="Light" HorizontalAlignment="Center" Margin="0,18"/>
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button x:Name="StopwatchStart" Content="Start" Style="{StaticResource ClayButton}" MinWidth="120"/>
+                <Button x:Name="LapButton" Content="Lap" Style="{StaticResource ClayButton}" MinWidth="90"/>
+                <Button x:Name="StopwatchReset" Content="Reset" Style="{StaticResource ClayButton}" MinWidth="90"/>
+              </StackPanel>
+              <Border Background="#55101A29" BorderBrush="#555ACBEE" BorderThickness="1" CornerRadius="14" Margin="35,15" Padding="8">
+                <ListBox x:Name="LapList" Height="175" Background="Transparent" Foreground="#FFD9ECFA" BorderThickness="0"/>
+              </Border>
+            </StackPanel>
+          </Grid>
+        </Grid>
+      </Grid>
+    </Grid>
+  </Border>
+</Window>
+'@
+    $reader = New-Object System.Xml.XmlNodeReader $toolsXaml
+    $window = [Windows.Markup.XamlReader]::Load($reader)
+    $script:ToolsWindow = $window
+    $names = @('TimerPanel','StopwatchPanel','TimerDisplay','StopwatchDisplay','TimerStart','StopwatchStart',
+        'HoursBox','MinutesBox','SecondsBox','SoundBox','LapList')
+    $script:ToolsControls = @{}
+    foreach ($name in $names) { $script:ToolsControls[$name] = $window.FindName($name) }
+    $soundBox = $script:ToolsControls.SoundBox
+    foreach ($sound in $script:AlarmNames) { [void]$soundBox.Items.Add($sound) }
+    $soundBox.SelectedItem = [string]$script:Settings.AlarmSound
+    if ($soundBox.SelectedIndex -lt 0) { $soundBox.SelectedIndex = 0 }
+    $window.FindName('DragBar').Add_MouseLeftButtonDown({ try { $window.DragMove() } catch {} }.GetNewClosure())
+    $window.FindName('CloseTools').Add_Click({ $window.Close() }.GetNewClosure())
+    $window.FindName('TimerTab').Add_Click({
+        $script:ToolsControls.TimerPanel.Visibility = 'Visible'; $script:ToolsControls.StopwatchPanel.Visibility = 'Collapsed'
+    })
+    $window.FindName('StopwatchTab').Add_Click({
+        $script:ToolsControls.TimerPanel.Visibility = 'Collapsed'; $script:ToolsControls.StopwatchPanel.Visibility = 'Visible'
+    })
+    $soundBox.Add_SelectionChanged({
+        if ($soundBox.SelectedItem) { $script:Settings.AlarmSound = [string]$soundBox.SelectedItem; Save-Settings }
+    }.GetNewClosure())
+    $window.FindName('TestSound').Add_Click({ Play-SelectedAlarm })
+    $script:ToolsControls.TimerStart.Add_Click({
+        if ($script:TimerRunning) {
+            $script:TimerPausedSeconds = [Math]::Max(0, ($script:TimerEnd - [DateTime]::Now).TotalSeconds)
+            $script:TimerRunning = $false; $script:TimerEnd = $null
+        } else {
+            $seconds = $script:TimerPausedSeconds
+            if ($seconds -le 0) {
+                $hours = $script:ToolsControls.HoursBox.Text -as [int]
+                $minutes = $script:ToolsControls.MinutesBox.Text -as [int]
+                $secs = $script:ToolsControls.SecondsBox.Text -as [int]
+                $seconds = [Math]::Max(0, ($hours * 3600) + ($minutes * 60) + $secs)
+            }
+            if ($seconds -gt 0) {
+                $script:TimerPausedSeconds = $seconds
+                $script:TimerEnd = [DateTime]::Now.AddSeconds($seconds)
+                $script:TimerRunning = $true
+            }
+        }
+        Update-TimeTools
+    })
+    $window.FindName('TimerReset').Add_Click({
+        $script:TimerRunning = $false; $script:TimerEnd = $null; $script:TimerPausedSeconds = 0
+        Update-TimeTools
+    })
+    $script:ToolsControls.StopwatchStart.Add_Click({
+        if ($script:Stopwatch.IsRunning) { $script:Stopwatch.Stop() } else { $script:Stopwatch.Start() }
+        Update-TimeTools
+    })
+    $window.FindName('StopwatchReset').Add_Click({
+        $script:Stopwatch.Reset(); $script:ToolsControls.LapList.Items.Clear(); Update-TimeTools
+    })
+    $window.FindName('LapButton').Add_Click({
+        $lap = $script:Stopwatch.Elapsed
+        $number = $script:ToolsControls.LapList.Items.Count + 1
+        [void]$script:ToolsControls.LapList.Items.Insert(0, ('Lap {0:00}     {1:00}:{2:00}:{3:00}.{4:0}' -f $number, [Math]::Floor($lap.TotalHours), $lap.Minutes, $lap.Seconds, [Math]::Floor($lap.Milliseconds / 100)))
+    })
+    $window.Add_Closed({ $script:ToolsWindow = $null; $script:ToolsControls = $null })
+    Update-TimeTools
+    $window.Show()
+    $window.Activate()
+}
+
 $script:Settings = Load-Settings
 
 [xml]$xaml = @'
@@ -389,6 +689,7 @@ $script:HitArea.Effect = $script:Glow
 
 $menu = [System.Windows.Forms.ContextMenuStrip]::new()
 $showItem = New-MenuItem 'Show clock' { $script:Window.Show(); $script:Window.Activate() }
+$toolsItem = New-MenuItem 'Timer && stopwatch...' { Show-TimeTools }
 $settingsItem = New-MenuItem 'Settings...' { Show-SettingsWindow }
 $script:FormatItem = New-MenuItem '24-hour time' {
     $script:Settings.Use24Hour = -not $script:Settings.Use24Hour
@@ -474,7 +775,7 @@ $uninstallItem = New-MenuItem 'Uninstall MiniClock...' { Uninstall-MiniClock }
 $exitItem = New-MenuItem 'Exit MiniClock' { Stop-MiniClock }
 
 foreach ($item in @(
-    $showItem, $settingsItem, (New-Object System.Windows.Forms.ToolStripSeparator),
+    $showItem, $toolsItem, $settingsItem, (New-Object System.Windows.Forms.ToolStripSeparator),
     $script:FormatItem, $script:SecondsItem, $script:DateItem,
     $themeMenu, $sizeMenu, $opacityMenu, $colorMenu, $shadowItem,
     (New-Object System.Windows.Forms.ToolStripSeparator),
@@ -498,6 +799,11 @@ $script:Tray.Add_DoubleClick({ $script:Window.Show(); $script:Window.Activate() 
 $script:Window.Left = [double]$script:Settings.Left
 $script:Window.Top = [double]$script:Settings.Top
 $script:Window.Add_MouseLeftButtonDown({
+    if ($_.ClickCount -ge 2) {
+        Show-TimeTools
+        $_.Handled = $true
+        return
+    }
     if (-not $script:Settings.Locked -and $_.ButtonState -eq 'Pressed') {
         try { $script:Window.DragMove() } catch {}
     }
@@ -527,13 +833,15 @@ $script:Window.Add_SourceInitialized({
 
 $timer = [System.Windows.Threading.DispatcherTimer]::new()
 $timer.Interval = [TimeSpan]::FromMilliseconds(200)
-$timer.Add_Tick({ Update-Clock })
+$timer.Add_Tick({ Update-Clock; Update-TimeTools })
 $timer.Start()
 
 Apply-Appearance
 $script:StartupItem.Checked = Test-Path -LiteralPath $script:StartupLink
 $app = [System.Windows.Application]::new()
-if ($OpenSettings) {
+if ($OpenTools) {
+    $script:Window.Add_ContentRendered({ Show-TimeTools })
+} elseif ($OpenSettings) {
     $script:Window.Add_ContentRendered({ Show-SettingsWindow })
 } elseif ($StartHidden) {
     $script:Window.Add_ContentRendered({ $script:Window.Hide() })

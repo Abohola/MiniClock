@@ -5,6 +5,8 @@
 A tiny transparent clock that stays above every window and lives quietly in the
 notification area, similar to Lightshot or Ditto.
 
+Double-click the clock to open Time Tools.
+
 ## Install it
 
 Download and run **MiniClockSetup.exe** from the latest GitHub release. MiniClock
@@ -30,6 +32,9 @@ icon to open the menu.
 - Choose from 17 clock colors, including black
 - Switch between Glass, Midnight Neon, Warm Ember, Minimal, and Matrix themes
 - Open a separate live Settings window without stopping the background clock
+- Run a background countdown timer with eight selectable alarm sounds
+- Use a stopwatch with pause, reset, and lap recording
+- Receive a glassy, always-on-top notification when a timer finishes
 - Lock the clock in place
 - Enable click-through mode
 - Start automatically with Windows
