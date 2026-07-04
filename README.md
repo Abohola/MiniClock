@@ -32,6 +32,7 @@ icon to open the menu.
 - Choose from 17 clock colors, including black
 - Switch between Glass, Midnight Neon, Warm Ember, Minimal, and Matrix themes
 - Open a separate live Settings window without stopping the background clock
+- Use a high-contrast glassmorphism Settings panel with readable controls
 - Run a background countdown timer with eight selectable alarm sounds
 - Use a stopwatch with pause, reset, and lap recording
 - Receive a glassy, always-on-top notification when a timer finishes

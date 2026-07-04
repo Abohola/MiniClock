@@ -60,7 +60,7 @@ public static class MiniClockSounds {
 '@
 
 $script:AppName = 'MiniClock'
-$script:AppVersion = [Version]'1.4.0'
+$script:AppVersion = [Version]'1.5.0'
 $script:LatestReleaseApi = 'https://api.github.com/repos/Abohola/MiniClock/releases/latest'
 $script:SettingsDir = Join-Path $env:APPDATA $script:AppName
 $script:SettingsFile = Join-Path $script:SettingsDir 'settings.json'
@@ -293,65 +293,121 @@ function Show-SettingsWindow {
     [xml]$settingsXaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="MiniClock Settings" Width="430" Height="590"
-        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
-        Background="#FF101726" Foreground="#FFF4F8FF" FontFamily="Segoe UI">
+        Title="MiniClock Settings" Width="470" Height="650" WindowStyle="None"
+        AllowsTransparency="True" WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
+        Background="Transparent" Foreground="#FFF4F8FF" FontFamily="Segoe UI" Topmost="True">
   <Window.Resources>
-    <Style TargetType="TextBlock"><Setter Property="Margin" Value="0,7,0,4"/></Style>
-    <Style TargetType="ComboBox"><Setter Property="Height" Value="32"/><Setter Property="Margin" Value="0,0,0,5"/></Style>
-    <Style TargetType="CheckBox"><Setter Property="Margin" Value="0,7,18,7"/></Style>
-    <Style TargetType="Button"><Setter Property="Padding" Value="14,7"/><Setter Property="Margin" Value="6,0,0,0"/></Style>
+    <Style TargetType="TextBlock">
+      <Setter Property="Foreground" Value="#FFF4F8FF"/><Setter Property="Margin" Value="0,7,0,4"/>
+    </Style>
+    <Style TargetType="ComboBox">
+      <Setter Property="Height" Value="38"/><Setter Property="Margin" Value="0,0,0,5"/>
+      <Setter Property="Foreground" Value="#FF0B1526"/><Setter Property="Background" Value="#FFF1F8FF"/>
+      <Setter Property="BorderBrush" Value="#AA8CE8FF"/><Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="8,4"/><Setter Property="FontSize" Value="13"/>
+    </Style>
+    <Style TargetType="CheckBox">
+      <Setter Property="Foreground" Value="#FFE8F5FF"/><Setter Property="FontSize" Value="13"/>
+      <Setter Property="Margin" Value="0,8,22,8"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style TargetType="Slider">
+      <Setter Property="Foreground" Value="#FF64D9FF"/><Setter Property="Margin" Value="4,2,4,4"/>
+    </Style>
+    <Style TargetType="Button">
+      <Setter Property="Foreground" Value="White"/><Setter Property="Background" Value="#FF294A6A"/>
+      <Setter Property="BorderBrush" Value="#886FDCFF"/><Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="16,9"/><Setter Property="Margin" Value="7,0,0,0"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Template">
+        <Setter.Value><ControlTemplate TargetType="Button">
+          <Border x:Name="ButtonSurface" CornerRadius="12" Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                  Padding="{TemplateBinding Padding}">
+            <Border.Effect><DropShadowEffect Color="#FF000000" BlurRadius="9" ShadowDepth="3" Opacity=".42"/></Border.Effect>
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ButtonSurface" Property="Background" Value="#FF37698E"/></Trigger>
+            <Trigger Property="IsPressed" Value="True"><Setter TargetName="ButtonSurface" Property="Opacity" Value=".75"/></Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value>
+      </Setter>
+    </Style>
   </Window.Resources>
-  <Grid Margin="24,18">
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-      <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-      <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-      <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
-      <RowDefinition Height="Auto"/>
-    </Grid.RowDefinitions>
-    <StackPanel Grid.Row="0">
-      <TextBlock Text="MiniClock" FontSize="24" FontWeight="SemiBold" Margin="0"/>
-      <TextBlock x:Name="VersionText" Foreground="#FF8FA4C2" Margin="0,2,0,12"/>
-    </StackPanel>
-    <StackPanel Grid.Row="1">
-      <TextBlock Text="Theme"/>
-      <ComboBox x:Name="ThemeBox"/>
-    </StackPanel>
-    <StackPanel Grid.Row="2">
-      <TextBlock Text="Custom clock color"/>
-      <ComboBox x:Name="ColorBox"/>
-    </StackPanel>
-    <Grid Grid.Row="3" Margin="0,5,0,0">
-      <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-      <StackPanel Grid.Column="0">
-        <TextBlock Text="Size"/>
-        <Slider x:Name="SizeSlider" Minimum="0.6" Maximum="2" TickFrequency="0.05" IsSnapToTickEnabled="True"/>
-      </StackPanel>
-      <StackPanel Grid.Column="1" Margin="20,0,0,0">
-        <TextBlock Text="Opacity"/>
-        <Slider x:Name="OpacitySlider" Minimum="0.25" Maximum="1" TickFrequency="0.05" IsSnapToTickEnabled="True"/>
-      </StackPanel>
+  <Border CornerRadius="30" BorderThickness="1" BorderBrush="#B094E9FF" Padding="1">
+    <Border.Background>
+      <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#F21A2942" Offset="0"/><GradientStop Color="#F00D1627" Offset=".55"/>
+        <GradientStop Color="#F21D2744" Offset="1"/>
+      </LinearGradientBrush>
+    </Border.Background>
+    <Border.Effect><DropShadowEffect Color="#FF000000" BlurRadius="38" ShadowDepth="10" Opacity=".7"/></Border.Effect>
+    <Grid ClipToBounds="True">
+      <Border Width="300" Height="105" CornerRadius="50" Background="#2842DFFF"
+              HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-28,-100,0">
+        <Border.RenderTransform><SkewTransform AngleX="-22"/></Border.RenderTransform>
+      </Border>
+      <Ellipse Width="220" Height="220" Fill="#164DE9D2" HorizontalAlignment="Left"
+               VerticalAlignment="Bottom" Margin="-105,0,0,-115"/>
+      <Grid Margin="28,18,28,24">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="64"/><RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid x:Name="SettingsDragBar" Grid.Row="0">
+          <StackPanel>
+            <TextBlock Text="MiniClock" FontSize="26" FontWeight="SemiBold" Margin="0"/>
+            <TextBlock x:Name="VersionText" Foreground="#FF9EC4E2" FontSize="12" Margin="0,1,0,0"/>
+          </StackPanel>
+          <Button x:Name="HeaderCloseButton" Content="X" Width="38" Height="34" Padding="0"
+                  HorizontalAlignment="Right" VerticalAlignment="Top" FontSize="20"/>
+        </Grid>
+        <StackPanel Grid.Row="1">
+          <TextBlock Text="THEME" Foreground="#FF9EC4E2" FontSize="11" FontWeight="SemiBold"/>
+          <ComboBox x:Name="ThemeBox"/>
+        </StackPanel>
+        <StackPanel Grid.Row="2">
+          <TextBlock Text="CUSTOM CLOCK COLOR" Foreground="#FF9EC4E2" FontSize="11" FontWeight="SemiBold"/>
+          <ComboBox x:Name="ColorBox"/>
+        </StackPanel>
+        <Grid Grid.Row="3" Margin="0,8,0,0">
+          <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <StackPanel Grid.Column="0">
+            <TextBlock Text="SIZE" Foreground="#FF9EC4E2" FontSize="11" FontWeight="SemiBold"/>
+            <Slider x:Name="SizeSlider" Minimum="0.6" Maximum="2" TickFrequency="0.05" IsSnapToTickEnabled="True"/>
+          </StackPanel>
+          <StackPanel Grid.Column="1" Margin="22,0,0,0">
+            <TextBlock Text="OPACITY" Foreground="#FF9EC4E2" FontSize="11" FontWeight="SemiBold"/>
+            <Slider x:Name="OpacitySlider" Minimum="0.25" Maximum="1" TickFrequency="0.05" IsSnapToTickEnabled="True"/>
+          </StackPanel>
+        </Grid>
+        <Border Grid.Row="4" Background="#481A304A" BorderBrush="#554FAFD0" BorderThickness="1"
+                CornerRadius="16" Padding="14,7" Margin="0,16,0,0">
+          <WrapPanel>
+            <CheckBox x:Name="SecondsCheck" Content="Show seconds"/>
+            <CheckBox x:Name="DateCheck" Content="Show date"/>
+            <CheckBox x:Name="FormatCheck" Content="24-hour time"/>
+            <CheckBox x:Name="ShadowCheck" Content="Text shadow"/>
+            <CheckBox x:Name="LockCheck" Content="Lock position"/>
+            <CheckBox x:Name="ClickCheck" Content="Click-through"/>
+            <CheckBox x:Name="StartupCheck" Content="Run at startup"/>
+          </WrapPanel>
+        </Border>
+        <Border Grid.Row="5" Background="#661C3553" BorderBrush="#556FDFFF" BorderThickness="1"
+                CornerRadius="14" Padding="14" Margin="0,14,0,0">
+          <TextBlock Text="Changes apply instantly. Close Settings whenever you like - MiniClock keeps running in the background."
+                     TextWrapping="Wrap" Foreground="#FFD7EEFF" Margin="0" LineHeight="19"/>
+        </Border>
+        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
+          <Button x:Name="ResetButton" Content="Reset position"/>
+          <Button x:Name="CloseButton" Content="Close" IsDefault="True" Background="#FF2876A2"/>
+        </StackPanel>
+      </Grid>
     </Grid>
-    <WrapPanel Grid.Row="4" Margin="0,12,0,0">
-      <CheckBox x:Name="SecondsCheck" Content="Show seconds"/>
-      <CheckBox x:Name="DateCheck" Content="Show date"/>
-      <CheckBox x:Name="FormatCheck" Content="24-hour time"/>
-      <CheckBox x:Name="ShadowCheck" Content="Text shadow"/>
-    </WrapPanel>
-    <WrapPanel Grid.Row="5">
-      <CheckBox x:Name="LockCheck" Content="Lock position"/>
-      <CheckBox x:Name="ClickCheck" Content="Click-through"/>
-      <CheckBox x:Name="StartupCheck" Content="Run at startup"/>
-    </WrapPanel>
-    <Border Grid.Row="6" Background="#FF18243A" CornerRadius="8" Padding="12" Margin="0,12,0,0">
-      <TextBlock Text="Changes apply instantly. Closing this window does not close the clock." TextWrapping="Wrap" Foreground="#FFB9CAE2" Margin="0"/>
-    </Border>
-    <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
-      <Button x:Name="ResetButton" Content="Reset position"/>
-      <Button x:Name="CloseButton" Content="Close" IsDefault="True"/>
-    </StackPanel>
-  </Grid>
+  </Border>
 </Window>
 '@
     $reader = New-Object System.Xml.XmlNodeReader $settingsXaml
@@ -371,7 +427,7 @@ function Show-SettingsWindow {
         [void]$colorBox.Items.Add($item)
         if ($script:Settings.TextColor -eq $choice[1]) { $colorBox.SelectedItem = $item }
     }
-    $window.FindName('VersionText').Text = "Version $($script:AppVersion)  •  runs in the background"
+    $window.FindName('VersionText').Text = "Version $($script:AppVersion)  |  runs in the background"
     $sizeSlider = $window.FindName('SizeSlider'); $sizeSlider.Value = [double]$script:Settings.Scale
     $opacitySlider = $window.FindName('OpacitySlider'); $opacitySlider.Value = [double]$script:Settings.Opacity
     $secondsCheck = $window.FindName('SecondsCheck'); $secondsCheck.IsChecked = [bool]$script:Settings.ShowSeconds
@@ -382,6 +438,8 @@ function Show-SettingsWindow {
     $clickCheck = $window.FindName('ClickCheck'); $clickCheck.IsChecked = [bool]$script:Settings.ClickThrough
     $startupCheck = $window.FindName('StartupCheck'); $startupCheck.IsChecked = Test-Path -LiteralPath $script:StartupLink
 
+    $window.FindName('SettingsDragBar').Add_MouseLeftButtonDown({ try { $window.DragMove() } catch {} }.GetNewClosure())
+    $window.FindName('HeaderCloseButton').Add_Click({ $window.Close() }.GetNewClosure())
     $themeBox.Add_SelectionChanged({
         if ($themeBox.SelectedItem) { $script:Settings.Theme = [string]$themeBox.SelectedItem.Tag; Apply-Appearance; Save-Settings }
     }.GetNewClosure())
