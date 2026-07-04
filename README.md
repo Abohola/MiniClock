@@ -1,5 +1,7 @@
 # MiniClock for Windows 10/11
 
+![MiniClock glass logo](assets/MiniClock-logo.png)
+
 A tiny transparent clock that stays above every window and lives quietly in the
 notification area, similar to Lightshot or Ditto.
 
@@ -25,6 +27,7 @@ icon to open the menu.
 - Switch between 12-hour and 24-hour time
 - Show or hide seconds and the date
 - Choose size, opacity, color, and text shadow
+- Switch between Glass, Midnight Neon, Warm Ember, Minimal, and Matrix themes
 - Lock the clock in place
 - Enable click-through mode
 - Start automatically with Windows

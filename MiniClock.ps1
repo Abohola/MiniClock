@@ -23,7 +23,7 @@ $script:Defaults = @{
     Left = 80.0; Top = 80.0; Scale = 1.0; Opacity = 0.88
     Use24Hour = $false; ShowSeconds = $true; ShowDate = $false
     Locked = $false; ClickThrough = $false; TextColor = '#FFFFFFFF'
-    Shadow = $true
+    Shadow = $true; Theme = 'Glass'
 }
 
 function Load-Settings {
@@ -96,10 +96,60 @@ function Apply-Appearance {
     $script:TimeText.FontSize = 38 * $scale
     $script:DateText.FontSize = 12 * $scale
     $script:Window.Opacity = [double]$script:Settings.Opacity
-    $brush = [System.Windows.Media.BrushConverter]::new().ConvertFromString([string]$script:Settings.TextColor)
+    $converter = [System.Windows.Media.BrushConverter]::new()
+    $theme = [string]$script:Settings.Theme
+    $background = '#01000000'
+    $border = '#00FFFFFF'
+    $textColor = [string]$script:Settings.TextColor
+    $font = 'Segoe UI Semibold'
+    $corner = 9
+    $borderWidth = 0
+    switch ($theme) {
+        'Glass' {
+            $background = '#B8233550'; $border = '#90BFEAFF'; $textColor = '#FFF4FBFF'
+            $corner = 13; $borderWidth = 1
+        }
+        'Midnight Neon' {
+            $background = '#DC070B1C'; $border = '#B12EDCFF'; $textColor = '#FF79E8FF'
+            $corner = 10; $borderWidth = 1
+        }
+        'Warm Ember' {
+            $background = '#D82B1114'; $border = '#AFFF9A62'; $textColor = '#FFFFD2A1'
+            $corner = 12; $borderWidth = 1
+        }
+        'Matrix' {
+            $background = '#E208120C'; $border = '#9B38FF7A'; $textColor = '#FF55FF88'
+            $font = 'Cascadia Mono'; $corner = 4; $borderWidth = 1
+        }
+        'Minimal' {
+            $background = '#01000000'; $border = '#00FFFFFF'; $textColor = '#FFFFFFFF'
+        }
+    }
+    $brush = $converter.ConvertFromString($textColor)
     $script:TimeText.Foreground = $brush
     $script:DateText.Foreground = $brush
+    $script:TimeText.FontFamily = [System.Windows.Media.FontFamily]::new($font)
+    $script:DateText.FontFamily = [System.Windows.Media.FontFamily]::new($font)
+    $script:HitArea.Background = $converter.ConvertFromString($background)
+    $script:HitArea.BorderBrush = $converter.ConvertFromString($border)
+    $script:HitArea.BorderThickness = [System.Windows.Thickness]::new($borderWidth)
+    $script:HitArea.CornerRadius = [System.Windows.CornerRadius]::new($corner)
     $script:Glow.Opacity = if ($script:Settings.Shadow) { 0.72 } else { 0 }
+    if ($theme -eq 'Midnight Neon') {
+        $script:Glow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#402EDCFF')
+        $script:Glow.BlurRadius = 14
+    } elseif ($theme -eq 'Warm Ember') {
+        $script:Glow.Color = [System.Windows.Media.ColorConverter]::ConvertFromString('#55FF6B35')
+        $script:Glow.BlurRadius = 12
+    } else {
+        $script:Glow.Color = [System.Windows.Media.Colors]::Black
+        $script:Glow.BlurRadius = 9
+    }
+    if ($script:ThemeItems) {
+        foreach ($key in @($script:ThemeItems.Keys)) {
+            $script:ThemeItems[$key].Checked = ($key -eq $theme)
+        }
+    }
     $script:FormatItem.Checked = [bool]$script:Settings.Use24Hour
     $script:SecondsItem.Checked = [bool]$script:Settings.ShowSeconds
     $script:DateItem.Checked = [bool]$script:Settings.ShowDate
@@ -185,11 +235,24 @@ foreach ($entry in @(@('50%',0.5), @('70%',0.7), @('85%',0.85), @('100%',1.0))) 
     [void]$opacityMenu.DropDownItems.Add($item)
 }
 
+$themeMenu = [System.Windows.Forms.ToolStripMenuItem]::new('Theme')
+$script:ThemeItems = @{}
+foreach ($themeName in @('Glass', 'Midnight Neon', 'Warm Ember', 'Minimal', 'Matrix')) {
+    $value = $themeName
+    $item = New-MenuItem $themeName ({
+        $script:Settings.Theme = $value
+        Apply-Appearance; Save-Settings
+    }.GetNewClosure())
+    $script:ThemeItems[$themeName] = $item
+    [void]$themeMenu.DropDownItems.Add($item)
+}
+
 $colorMenu = [System.Windows.Forms.ToolStripMenuItem]::new('Color')
 foreach ($entry in @(@('White','#FFFFFFFF'), @('Warm','#FFFFD38A'), @('Ice blue','#FF8DDBFF'), @('Mint','#FF8FFFC1'), @('Rose','#FFFFA9C6'))) {
     $label = $entry[0]; $value = $entry[1]
     $item = New-MenuItem $label ({
         $script:Settings.TextColor = $value
+        $script:Settings.Theme = 'Custom'
         Apply-Appearance; Save-Settings
     }.GetNewClosure())
     [void]$colorMenu.DropDownItems.Add($item)
@@ -219,7 +282,7 @@ $exitItem = New-MenuItem 'Exit MiniClock' {
 foreach ($item in @(
     $showItem, (New-Object System.Windows.Forms.ToolStripSeparator),
     $script:FormatItem, $script:SecondsItem, $script:DateItem,
-    $sizeMenu, $opacityMenu, $colorMenu, $shadowItem,
+    $themeMenu, $sizeMenu, $opacityMenu, $colorMenu, $shadowItem,
     (New-Object System.Windows.Forms.ToolStripSeparator),
     $script:LockItem, $script:ClickItem, $script:StartupItem, $resetItem,
     (New-Object System.Windows.Forms.ToolStripSeparator), $hideItem, $exitItem
@@ -227,7 +290,12 @@ foreach ($item in @(
 
 $script:Tray = [System.Windows.Forms.NotifyIcon]::new()
 $script:Tray.Text = 'MiniClock'
-$script:Tray.Icon = [System.Drawing.SystemIcons]::Information
+$iconPath = Join-Path $PSScriptRoot 'assets\MiniClock.ico'
+$script:Tray.Icon = if (Test-Path -LiteralPath $iconPath) {
+    [System.Drawing.Icon]::new($iconPath)
+} else {
+    [System.Drawing.SystemIcons]::Information
+}
 $script:Tray.ContextMenuStrip = $menu
 $script:Tray.Visible = $true
 $script:Tray.Add_DoubleClick({ $script:Window.Show(); $script:Window.Activate() })
