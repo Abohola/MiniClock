@@ -27,7 +27,9 @@ icon to open the menu.
 - Switch between 12-hour and 24-hour time
 - Show or hide seconds and the date
 - Choose size, opacity, color, and text shadow
+- Choose from 17 clock colors, including black
 - Switch between Glass, Midnight Neon, Warm Ember, Minimal, and Matrix themes
+- Open a separate live Settings window without stopping the background clock
 - Lock the clock in place
 - Enable click-through mode
 - Start automatically with Windows

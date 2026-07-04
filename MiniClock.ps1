@@ -1,4 +1,4 @@
-param([switch]$StartHidden)
+param([switch]$StartHidden, [switch]$OpenSettings)
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms, System.Drawing
@@ -13,13 +13,26 @@ public static class MiniClockNative {
 '@
 
 $script:AppName = 'MiniClock'
-$script:AppVersion = [Version]'1.2.0'
+$script:AppVersion = [Version]'1.3.0'
 $script:LatestReleaseApi = 'https://api.github.com/repos/Abohola/MiniClock/releases/latest'
 $script:SettingsDir = Join-Path $env:APPDATA $script:AppName
 $script:SettingsFile = Join-Path $script:SettingsDir 'settings.json'
 $script:StartupLink = Join-Path ([Environment]::GetFolderPath('Startup')) 'MiniClock.lnk'
 $script:Launcher = Join-Path $PSScriptRoot 'Launch MiniClock.vbs'
 $script:Exiting = $false
+$script:SettingsWindow = $null
+
+$script:ColorChoices = @(
+    @('White', '#FFFFFFFF'), @('Warm', '#FFFFD38A'),
+    @('Ice blue', '#FF8DDBFF'), @('Mint', '#FF8FFFC1'),
+    @('Rose', '#FFFFA9C6'), @('Black', '#FF000000'),
+    @('Silver', '#FFC9D1D9'), @('Slate', '#FF7D8A99'),
+    @('Sky', '#FF45BFFF'), @('Ocean', '#FF168AAD'),
+    @('Indigo', '#FF818CF8'), @('Violet', '#FFC084FC'),
+    @('Magenta', '#FFFF5FD2'), @('Coral', '#FFFF7B72'),
+    @('Orange', '#FFFF9F43'), @('Lemon', '#FFFFE66D'),
+    @('Lime', '#FFB8F25B')
+)
 
 $script:Defaults = @{
     Left = 80.0; Top = 80.0; Scale = 1.0; Opacity = 0.88
@@ -217,6 +230,131 @@ function Apply-Appearance {
     $script:Window.SizeToContent = 'WidthAndHeight'
 }
 
+function Show-SettingsWindow {
+    if ($script:SettingsWindow) {
+        $script:SettingsWindow.Show()
+        $script:SettingsWindow.Activate()
+        return
+    }
+    [xml]$settingsXaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MiniClock Settings" Width="430" Height="590"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
+        Background="#FF101726" Foreground="#FFF4F8FF" FontFamily="Segoe UI">
+  <Window.Resources>
+    <Style TargetType="TextBlock"><Setter Property="Margin" Value="0,7,0,4"/></Style>
+    <Style TargetType="ComboBox"><Setter Property="Height" Value="32"/><Setter Property="Margin" Value="0,0,0,5"/></Style>
+    <Style TargetType="CheckBox"><Setter Property="Margin" Value="0,7,18,7"/></Style>
+    <Style TargetType="Button"><Setter Property="Padding" Value="14,7"/><Setter Property="Margin" Value="6,0,0,0"/></Style>
+  </Window.Resources>
+  <Grid Margin="24,18">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+    <StackPanel Grid.Row="0">
+      <TextBlock Text="MiniClock" FontSize="24" FontWeight="SemiBold" Margin="0"/>
+      <TextBlock x:Name="VersionText" Foreground="#FF8FA4C2" Margin="0,2,0,12"/>
+    </StackPanel>
+    <StackPanel Grid.Row="1">
+      <TextBlock Text="Theme"/>
+      <ComboBox x:Name="ThemeBox"/>
+    </StackPanel>
+    <StackPanel Grid.Row="2">
+      <TextBlock Text="Custom clock color"/>
+      <ComboBox x:Name="ColorBox"/>
+    </StackPanel>
+    <Grid Grid.Row="3" Margin="0,5,0,0">
+      <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+      <StackPanel Grid.Column="0">
+        <TextBlock Text="Size"/>
+        <Slider x:Name="SizeSlider" Minimum="0.6" Maximum="2" TickFrequency="0.05" IsSnapToTickEnabled="True"/>
+      </StackPanel>
+      <StackPanel Grid.Column="1" Margin="20,0,0,0">
+        <TextBlock Text="Opacity"/>
+        <Slider x:Name="OpacitySlider" Minimum="0.25" Maximum="1" TickFrequency="0.05" IsSnapToTickEnabled="True"/>
+      </StackPanel>
+    </Grid>
+    <WrapPanel Grid.Row="4" Margin="0,12,0,0">
+      <CheckBox x:Name="SecondsCheck" Content="Show seconds"/>
+      <CheckBox x:Name="DateCheck" Content="Show date"/>
+      <CheckBox x:Name="FormatCheck" Content="24-hour time"/>
+      <CheckBox x:Name="ShadowCheck" Content="Text shadow"/>
+    </WrapPanel>
+    <WrapPanel Grid.Row="5">
+      <CheckBox x:Name="LockCheck" Content="Lock position"/>
+      <CheckBox x:Name="ClickCheck" Content="Click-through"/>
+      <CheckBox x:Name="StartupCheck" Content="Run at startup"/>
+    </WrapPanel>
+    <Border Grid.Row="6" Background="#FF18243A" CornerRadius="8" Padding="12" Margin="0,12,0,0">
+      <TextBlock Text="Changes apply instantly. Closing this window does not close the clock." TextWrapping="Wrap" Foreground="#FFB9CAE2" Margin="0"/>
+    </Border>
+    <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button x:Name="ResetButton" Content="Reset position"/>
+      <Button x:Name="CloseButton" Content="Close" IsDefault="True"/>
+    </StackPanel>
+  </Grid>
+</Window>
+'@
+    $reader = New-Object System.Xml.XmlNodeReader $settingsXaml
+    $window = [Windows.Markup.XamlReader]::Load($reader)
+    $script:SettingsWindow = $window
+    $themeBox = $window.FindName('ThemeBox')
+    $colorBox = $window.FindName('ColorBox')
+    foreach ($name in @('Glass', 'Midnight Neon', 'Warm Ember', 'Minimal', 'Matrix')) {
+        $item = [System.Windows.Controls.ComboBoxItem]::new()
+        $item.Content = $name; $item.Tag = $name
+        [void]$themeBox.Items.Add($item)
+        if ($script:Settings.Theme -eq $name) { $themeBox.SelectedItem = $item }
+    }
+    foreach ($choice in $script:ColorChoices) {
+        $item = [System.Windows.Controls.ComboBoxItem]::new()
+        $item.Content = $choice[0]; $item.Tag = $choice[1]
+        [void]$colorBox.Items.Add($item)
+        if ($script:Settings.TextColor -eq $choice[1]) { $colorBox.SelectedItem = $item }
+    }
+    $window.FindName('VersionText').Text = "Version $($script:AppVersion)  •  runs in the background"
+    $sizeSlider = $window.FindName('SizeSlider'); $sizeSlider.Value = [double]$script:Settings.Scale
+    $opacitySlider = $window.FindName('OpacitySlider'); $opacitySlider.Value = [double]$script:Settings.Opacity
+    $secondsCheck = $window.FindName('SecondsCheck'); $secondsCheck.IsChecked = [bool]$script:Settings.ShowSeconds
+    $dateCheck = $window.FindName('DateCheck'); $dateCheck.IsChecked = [bool]$script:Settings.ShowDate
+    $formatCheck = $window.FindName('FormatCheck'); $formatCheck.IsChecked = [bool]$script:Settings.Use24Hour
+    $shadowCheck = $window.FindName('ShadowCheck'); $shadowCheck.IsChecked = [bool]$script:Settings.Shadow
+    $lockCheck = $window.FindName('LockCheck'); $lockCheck.IsChecked = [bool]$script:Settings.Locked
+    $clickCheck = $window.FindName('ClickCheck'); $clickCheck.IsChecked = [bool]$script:Settings.ClickThrough
+    $startupCheck = $window.FindName('StartupCheck'); $startupCheck.IsChecked = Test-Path -LiteralPath $script:StartupLink
+
+    $themeBox.Add_SelectionChanged({
+        if ($themeBox.SelectedItem) { $script:Settings.Theme = [string]$themeBox.SelectedItem.Tag; Apply-Appearance; Save-Settings }
+    }.GetNewClosure())
+    $colorBox.Add_SelectionChanged({
+        if ($colorBox.SelectedItem) { $script:Settings.TextColor = [string]$colorBox.SelectedItem.Tag; $script:Settings.Theme = 'Custom'; Apply-Appearance; Save-Settings }
+    }.GetNewClosure())
+    $sizeSlider.Add_ValueChanged({ $script:Settings.Scale = $sizeSlider.Value; Apply-Appearance; Save-Settings }.GetNewClosure())
+    $opacitySlider.Add_ValueChanged({ $script:Settings.Opacity = $opacitySlider.Value; Apply-Appearance; Save-Settings }.GetNewClosure())
+    $secondsCheck.Add_Click({ $script:Settings.ShowSeconds = $secondsCheck.IsChecked; Apply-Appearance; Save-Settings }.GetNewClosure())
+    $dateCheck.Add_Click({ $script:Settings.ShowDate = $dateCheck.IsChecked; Apply-Appearance; Save-Settings }.GetNewClosure())
+    $formatCheck.Add_Click({ $script:Settings.Use24Hour = $formatCheck.IsChecked; Apply-Appearance; Save-Settings }.GetNewClosure())
+    $shadowCheck.Add_Click({ $script:Settings.Shadow = $shadowCheck.IsChecked; Apply-Appearance; Save-Settings }.GetNewClosure())
+    $lockCheck.Add_Click({ $script:Settings.Locked = $lockCheck.IsChecked; Apply-Appearance; Save-Settings }.GetNewClosure())
+    $clickCheck.Add_Click({ Set-ClickThrough ([bool]$clickCheck.IsChecked) }.GetNewClosure())
+    $startupCheck.Add_Click({ Set-Startup ([bool]$startupCheck.IsChecked) }.GetNewClosure())
+    $window.FindName('ResetButton').Add_Click({
+        $area = [System.Windows.SystemParameters]::WorkArea
+        $script:Window.Left = $area.Right - $script:Window.ActualWidth - 28
+        $script:Window.Top = $area.Top + 28
+        Save-Settings
+    }.GetNewClosure())
+    $window.FindName('CloseButton').Add_Click({ $window.Close() }.GetNewClosure())
+    $window.Add_Closed({ $script:SettingsWindow = $null })
+    $window.Show()
+    $window.Activate()
+}
+
 $script:Settings = Load-Settings
 
 [xml]$xaml = @'
@@ -251,6 +389,7 @@ $script:HitArea.Effect = $script:Glow
 
 $menu = [System.Windows.Forms.ContextMenuStrip]::new()
 $showItem = New-MenuItem 'Show clock' { $script:Window.Show(); $script:Window.Activate() }
+$settingsItem = New-MenuItem 'Settings...' { Show-SettingsWindow }
 $script:FormatItem = New-MenuItem '24-hour time' {
     $script:Settings.Use24Hour = -not $script:Settings.Use24Hour
     Apply-Appearance; Save-Settings
@@ -307,7 +446,7 @@ foreach ($themeName in @('Glass', 'Midnight Neon', 'Warm Ember', 'Minimal', 'Mat
 }
 
 $colorMenu = [System.Windows.Forms.ToolStripMenuItem]::new('Color')
-foreach ($entry in @(@('White','#FFFFFFFF'), @('Warm','#FFFFD38A'), @('Ice blue','#FF8DDBFF'), @('Mint','#FF8FFFC1'), @('Rose','#FFFFA9C6'))) {
+foreach ($entry in $script:ColorChoices) {
     $label = $entry[0]; $value = $entry[1]
     $item = New-MenuItem $label ({
         $script:Settings.TextColor = $value
@@ -335,7 +474,7 @@ $uninstallItem = New-MenuItem 'Uninstall MiniClock...' { Uninstall-MiniClock }
 $exitItem = New-MenuItem 'Exit MiniClock' { Stop-MiniClock }
 
 foreach ($item in @(
-    $showItem, (New-Object System.Windows.Forms.ToolStripSeparator),
+    $showItem, $settingsItem, (New-Object System.Windows.Forms.ToolStripSeparator),
     $script:FormatItem, $script:SecondsItem, $script:DateItem,
     $themeMenu, $sizeMenu, $opacityMenu, $colorMenu, $shadowItem,
     (New-Object System.Windows.Forms.ToolStripSeparator),
@@ -394,7 +533,11 @@ $timer.Start()
 Apply-Appearance
 $script:StartupItem.Checked = Test-Path -LiteralPath $script:StartupLink
 $app = [System.Windows.Application]::new()
-if ($StartHidden) { $script:Window.Add_ContentRendered({ $script:Window.Hide() }) }
+if ($OpenSettings) {
+    $script:Window.Add_ContentRendered({ Show-SettingsWindow })
+} elseif ($StartHidden) {
+    $script:Window.Add_ContentRendered({ $script:Window.Hide() })
+}
 [void]$app.Run($script:Window)
 
 $timer.Stop()
