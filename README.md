@@ -31,6 +31,8 @@ icon to open the menu.
 - Lock the clock in place
 - Enable click-through mode
 - Start automatically with Windows
+- Check for and install updates from the notification-area menu
+- Uninstall directly from the notification-area menu
 - Hide/show from the notification-area icon
 - Hold **Ctrl** and scroll over the clock for fine opacity adjustment
 
@@ -41,8 +43,15 @@ menu again. Settings and screen position are saved in
 ## Uninstall
 
 For an installed copy, use **Settings > Apps > Installed apps > MiniClock** or
-the Start Menu uninstall shortcut. For a portable copy, exit MiniClock from its
-notification-area menu and delete this folder.
+the **Uninstall MiniClock** notification-area menu option. For a portable copy,
+exit MiniClock and delete its folder.
+
+## Update
+
+Right-click the clock or its notification-area icon and choose
+**Check for updates**. MiniClock checks the latest GitHub release, downloads the
+new per-user installer, exits safely, and starts the upgrade. Saved settings are
+kept when updating.
 
 ## Build the installer
 

@@ -13,6 +13,8 @@ public static class MiniClockNative {
 '@
 
 $script:AppName = 'MiniClock'
+$script:AppVersion = [Version]'1.2.0'
+$script:LatestReleaseApi = 'https://api.github.com/repos/Abohola/MiniClock/releases/latest'
 $script:SettingsDir = Join-Path $env:APPDATA $script:AppName
 $script:SettingsFile = Join-Path $script:SettingsDir 'settings.json'
 $script:StartupLink = Join-Path ([Environment]::GetFolderPath('Startup')) 'MiniClock.lnk'
@@ -46,6 +48,63 @@ function Save-Settings {
     $script:Settings.Left = [Math]::Round($script:Window.Left, 1)
     $script:Settings.Top = [Math]::Round($script:Window.Top, 1)
     $script:Settings | ConvertTo-Json | Set-Content -LiteralPath $script:SettingsFile -Encoding UTF8
+}
+
+function Stop-MiniClock {
+    $script:Exiting = $true
+    Save-Settings
+    if ($script:Tray) { $script:Tray.Visible = $false }
+    $script:Window.Close()
+    [System.Windows.Application]::Current.Shutdown()
+}
+
+function Check-ForUpdates {
+    try {
+        $release = Invoke-RestMethod -Uri $script:LatestReleaseApi -Headers @{ 'User-Agent' = 'MiniClock-Windows' }
+        $latest = [Version]([string]$release.tag_name).TrimStart('v')
+        if ($latest -le $script:AppVersion) {
+            [void][System.Windows.Forms.MessageBox]::Show(
+                "MiniClock $($script:AppVersion) is already the latest version.",
+                'MiniClock Update', 'OK', 'Information'
+            )
+            return
+        }
+        $answer = [System.Windows.Forms.MessageBox]::Show(
+            "MiniClock $latest is available.`n`nDownload and install it now?",
+            'MiniClock Update', 'YesNo', 'Information'
+        )
+        if ($answer -ne 'Yes') { return }
+        $asset = $release.assets | Where-Object { $_.name -eq 'MiniClockSetup.exe' } | Select-Object -First 1
+        if (-not $asset) { throw 'The release does not contain MiniClockSetup.exe.' }
+        $download = Join-Path $env:TEMP "MiniClockSetup-$latest.exe"
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $download -UseBasicParsing
+        Start-Process -FilePath $download
+        Stop-MiniClock
+    } catch {
+        [void][System.Windows.Forms.MessageBox]::Show(
+            "MiniClock could not check for updates.`n`n$($_.Exception.Message)",
+            'MiniClock Update', 'OK', 'Error'
+        )
+    }
+}
+
+function Uninstall-MiniClock {
+    $uninstaller = Join-Path $PSScriptRoot 'unins000.exe'
+    if (-not (Test-Path -LiteralPath $uninstaller)) {
+        [void][System.Windows.Forms.MessageBox]::Show(
+            'This is a portable copy. Exit MiniClock, then delete its folder to remove it.',
+            'Uninstall MiniClock', 'OK', 'Information'
+        )
+        return
+    }
+    $answer = [System.Windows.Forms.MessageBox]::Show(
+        'Remove MiniClock and its saved settings from this Windows account?',
+        'Uninstall MiniClock', 'YesNo', 'Warning'
+    )
+    if ($answer -eq 'Yes') {
+        Start-Process -FilePath $uninstaller
+        Stop-MiniClock
+    }
 }
 
 function New-MenuItem([string]$Text, [scriptblock]$Action, [switch]$Checked) {
@@ -271,13 +330,9 @@ $resetItem = New-MenuItem 'Reset position' {
     Save-Settings
 }
 $hideItem = New-MenuItem 'Hide clock' { $script:Window.Hide() }
-$exitItem = New-MenuItem 'Exit MiniClock' {
-    $script:Exiting = $true
-    Save-Settings
-    $script:Tray.Visible = $false
-    $script:Window.Close()
-    [System.Windows.Application]::Current.Shutdown()
-}
+$updateItem = New-MenuItem 'Check for updates...' { Check-ForUpdates }
+$uninstallItem = New-MenuItem 'Uninstall MiniClock...' { Uninstall-MiniClock }
+$exitItem = New-MenuItem 'Exit MiniClock' { Stop-MiniClock }
 
 foreach ($item in @(
     $showItem, (New-Object System.Windows.Forms.ToolStripSeparator),
@@ -285,6 +340,7 @@ foreach ($item in @(
     $themeMenu, $sizeMenu, $opacityMenu, $colorMenu, $shadowItem,
     (New-Object System.Windows.Forms.ToolStripSeparator),
     $script:LockItem, $script:ClickItem, $script:StartupItem, $resetItem,
+    (New-Object System.Windows.Forms.ToolStripSeparator), $updateItem, $uninstallItem,
     (New-Object System.Windows.Forms.ToolStripSeparator), $hideItem, $exitItem
 )) { [void]$menu.Items.Add($item) }
 

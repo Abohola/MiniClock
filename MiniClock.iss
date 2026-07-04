@@ -1,5 +1,5 @@
 #define MyAppName "MiniClock"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "Abohola"
 #define MyAppURL "https://github.com/Abohola/MiniClock"
 
@@ -57,3 +57,5 @@ Filename: "{sys}\wscript.exe"; Parameters: """{app}\Launch MiniClock.vbs"""; Des
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
+Type: filesandordirs; Name: "{userappdata}\MiniClock"
+Type: files; Name: "{userstartup}\MiniClock.lnk"
