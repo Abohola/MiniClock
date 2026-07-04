@@ -1,4 +1,4 @@
-param([switch]$StartHidden, [switch]$OpenSettings, [switch]$OpenTools)
+param([switch]$StartHidden, [switch]$OpenSettings, [switch]$OpenTools, [switch]$SmokeTestSettings)
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms, System.Drawing
@@ -60,7 +60,7 @@ public static class MiniClockSounds {
 '@
 
 $script:AppName = 'MiniClock'
-$script:AppVersion = [Version]'1.5.0'
+$script:AppVersion = [Version]'1.5.1'
 $script:LatestReleaseApi = 'https://api.github.com/repos/Abohola/MiniClock/releases/latest'
 $script:SettingsDir = Join-Path $env:APPDATA $script:AppName
 $script:SettingsFile = Join-Path $script:SettingsDir 'settings.json'
@@ -68,6 +68,7 @@ $script:StartupLink = Join-Path ([Environment]::GetFolderPath('Startup')) 'MiniC
 $script:Launcher = Join-Path $PSScriptRoot 'Launch MiniClock.vbs'
 $script:Exiting = $false
 $script:SettingsWindow = $null
+$script:SettingsControls = $null
 $script:ToolsWindow = $null
 $script:AlarmPopup = $null
 $script:TimerRunning = $false
@@ -437,32 +438,41 @@ function Show-SettingsWindow {
     $lockCheck = $window.FindName('LockCheck'); $lockCheck.IsChecked = [bool]$script:Settings.Locked
     $clickCheck = $window.FindName('ClickCheck'); $clickCheck.IsChecked = [bool]$script:Settings.ClickThrough
     $startupCheck = $window.FindName('StartupCheck'); $startupCheck.IsChecked = Test-Path -LiteralPath $script:StartupLink
+    $script:SettingsControls = @{
+        Window = $window; ThemeBox = $themeBox; ColorBox = $colorBox
+        SizeSlider = $sizeSlider; OpacitySlider = $opacitySlider
+        SecondsCheck = $secondsCheck; DateCheck = $dateCheck; FormatCheck = $formatCheck
+        ShadowCheck = $shadowCheck; LockCheck = $lockCheck; ClickCheck = $clickCheck
+        StartupCheck = $startupCheck
+    }
 
-    $window.FindName('SettingsDragBar').Add_MouseLeftButtonDown({ try { $window.DragMove() } catch {} }.GetNewClosure())
-    $window.FindName('HeaderCloseButton').Add_Click({ $window.Close() }.GetNewClosure())
+    $window.FindName('SettingsDragBar').Add_MouseLeftButtonDown({ try { $script:SettingsWindow.DragMove() } catch {} })
+    $window.FindName('HeaderCloseButton').Add_Click({ $script:SettingsWindow.Close() })
     $themeBox.Add_SelectionChanged({
-        if ($themeBox.SelectedItem) { $script:Settings.Theme = [string]$themeBox.SelectedItem.Tag; Apply-Appearance; Save-Settings }
-    }.GetNewClosure())
+        $selected = $script:SettingsControls.ThemeBox.SelectedItem
+        if ($selected) { $script:Settings.Theme = [string]$selected.Tag; Apply-Appearance; Save-Settings }
+    })
     $colorBox.Add_SelectionChanged({
-        if ($colorBox.SelectedItem) { $script:Settings.TextColor = [string]$colorBox.SelectedItem.Tag; $script:Settings.Theme = 'Custom'; Apply-Appearance; Save-Settings }
-    }.GetNewClosure())
-    $sizeSlider.Add_ValueChanged({ $script:Settings.Scale = $sizeSlider.Value; Apply-Appearance; Save-Settings }.GetNewClosure())
-    $opacitySlider.Add_ValueChanged({ $script:Settings.Opacity = $opacitySlider.Value; Apply-Appearance; Save-Settings }.GetNewClosure())
-    $secondsCheck.Add_Click({ $script:Settings.ShowSeconds = $secondsCheck.IsChecked; Apply-Appearance; Save-Settings }.GetNewClosure())
-    $dateCheck.Add_Click({ $script:Settings.ShowDate = $dateCheck.IsChecked; Apply-Appearance; Save-Settings }.GetNewClosure())
-    $formatCheck.Add_Click({ $script:Settings.Use24Hour = $formatCheck.IsChecked; Apply-Appearance; Save-Settings }.GetNewClosure())
-    $shadowCheck.Add_Click({ $script:Settings.Shadow = $shadowCheck.IsChecked; Apply-Appearance; Save-Settings }.GetNewClosure())
-    $lockCheck.Add_Click({ $script:Settings.Locked = $lockCheck.IsChecked; Apply-Appearance; Save-Settings }.GetNewClosure())
-    $clickCheck.Add_Click({ Set-ClickThrough ([bool]$clickCheck.IsChecked) }.GetNewClosure())
-    $startupCheck.Add_Click({ Set-Startup ([bool]$startupCheck.IsChecked) }.GetNewClosure())
+        $selected = $script:SettingsControls.ColorBox.SelectedItem
+        if ($selected) { $script:Settings.TextColor = [string]$selected.Tag; $script:Settings.Theme = 'Custom'; Apply-Appearance; Save-Settings }
+    })
+    $sizeSlider.Add_ValueChanged({ $script:Settings.Scale = $script:SettingsControls.SizeSlider.Value; Apply-Appearance; Save-Settings })
+    $opacitySlider.Add_ValueChanged({ $script:Settings.Opacity = $script:SettingsControls.OpacitySlider.Value; Apply-Appearance; Save-Settings })
+    $secondsCheck.Add_Click({ $script:Settings.ShowSeconds = $script:SettingsControls.SecondsCheck.IsChecked; Apply-Appearance; Save-Settings })
+    $dateCheck.Add_Click({ $script:Settings.ShowDate = $script:SettingsControls.DateCheck.IsChecked; Apply-Appearance; Save-Settings })
+    $formatCheck.Add_Click({ $script:Settings.Use24Hour = $script:SettingsControls.FormatCheck.IsChecked; Apply-Appearance; Save-Settings })
+    $shadowCheck.Add_Click({ $script:Settings.Shadow = $script:SettingsControls.ShadowCheck.IsChecked; Apply-Appearance; Save-Settings })
+    $lockCheck.Add_Click({ $script:Settings.Locked = $script:SettingsControls.LockCheck.IsChecked; Apply-Appearance; Save-Settings })
+    $clickCheck.Add_Click({ Set-ClickThrough ([bool]$script:SettingsControls.ClickCheck.IsChecked) })
+    $startupCheck.Add_Click({ Set-Startup ([bool]$script:SettingsControls.StartupCheck.IsChecked) })
     $window.FindName('ResetButton').Add_Click({
         $area = [System.Windows.SystemParameters]::WorkArea
         $script:Window.Left = $area.Right - $script:Window.ActualWidth - 28
         $script:Window.Top = $area.Top + 28
         Save-Settings
-    }.GetNewClosure())
-    $window.FindName('CloseButton').Add_Click({ $window.Close() }.GetNewClosure())
-    $window.Add_Closed({ $script:SettingsWindow = $null })
+    })
+    $window.FindName('CloseButton').Add_Click({ $script:SettingsWindow.Close() })
+    $window.Add_Closed({ $script:SettingsWindow = $null; $script:SettingsControls = $null })
     $window.Show()
     $window.Activate()
 }
@@ -897,7 +907,23 @@ $timer.Start()
 Apply-Appearance
 $script:StartupItem.Checked = Test-Path -LiteralPath $script:StartupLink
 $app = [System.Windows.Application]::new()
-if ($OpenTools) {
+$app.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
+$app.Add_DispatcherUnhandledException({
+    try {
+        if (-not (Test-Path -LiteralPath $script:SettingsDir)) {
+            New-Item -ItemType Directory -Path $script:SettingsDir -Force | Out-Null
+        }
+        Add-Content -LiteralPath (Join-Path $script:SettingsDir 'error.log') -Value "$(Get-Date -Format o) $($_.Exception)"
+    } catch {}
+    $_.Handled = $true
+})
+if ($SmokeTestSettings) {
+    $script:Window.Add_ContentRendered({
+        Show-SettingsWindow
+        $script:SettingsControls.OpacitySlider.Value = [Math]::Max(0.25, [double]$script:Settings.Opacity - 0.05)
+        $script:SettingsWindow.Close()
+    })
+} elseif ($OpenTools) {
     $script:Window.Add_ContentRendered({ Show-TimeTools })
 } elseif ($OpenSettings) {
     $script:Window.Add_ContentRendered({ Show-SettingsWindow })
